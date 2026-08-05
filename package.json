@@ -1,0 +1,12 @@
+{
+  "name": "cristiana-registro",
+  "version": "1.0.0",
+  "description": "App de produccion Cristiana",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
