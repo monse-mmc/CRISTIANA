@@ -1532,7 +1532,28 @@ function guardar(area){
     document.getElementById('e-codigo').selectedIndex=0;
     document.getElementById('e-color').selectedIndex=0;
   }
-  var regs=gR(area);regs.unshift({id:Date.now(),fecha:fecha,d:d,inc:inc,desc:desc});sR(area,regs);
+  var newReg={id:Date.now(),fecha:fecha,d:d,inc:inc,desc:desc};
+  var regs=gR(area);regs.unshift(newReg);sR(area,regs);
+  // Guardar en Supabase en paralelo
+  fetch('/api/registros',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      area:area,
+      fecha:fecha,
+      folio:parseInt(d.folio)||null,
+      bolsa:parseInt(d.bolsa)||null,
+      datos:d,
+      incidencia:inc||null,
+      descripcion:desc||null
+    })
+  }).then(function(r){return r.json();}).then(function(res){
+    if(res&&res[0]&&res[0].id){
+      // Actualizar id local con el de la BD
+      var rs=gR(area);
+      if(rs[0]&&rs[0].id===newReg.id){rs[0].id=res[0].id;sR(area,rs);}
+    }
+  }).catch(function(e){console.warn('BD fallo, solo local:',e);});
   toast('Guardado');
 }
 
@@ -1706,7 +1727,11 @@ function renderHist(area){
     return '<div class="ri"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div style="flex:1">'+res+'</div><div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px"><span style="font-size:11px;color:#999">'+r.fecha+'</span><button class="bdel" onclick="borrar(\''+area+'\','+r.id+')">x</button></div></div>'+(r.inc?'<div class="rinc">⚠️ '+r.inc+(r.desc?' - '+r.desc:'')+'</div>':'')+'</div>';
   }).join('');
 }
-function borrar(area,id){sR(area,gR(area).filter(function(r){return r.id!==id;}));renderHist(area);toast('Eliminado');}
+function borrar(area,id){
+  sR(area,gR(area).filter(function(r){return r.id!==id;}));
+  fetch('/api/registros?id='+id,{method:'DELETE'}).catch(function(e){console.warn(e);});
+  renderHist(area);toast('Eliminado');
+}
 function borrarT(id){sT(gT().filter(function(t){return t.id!==id;}));renderHist('traslados');toast('Eliminado');}
 
 function renderRes(area){
@@ -3785,5 +3810,41 @@ window.addEventListener('load', function() {
 });
 
 // ══ FIN CAPA DE SINCRONIZACIÓN ══
+
+
+// Cargar historial desde BD y sincronizar
+function cargarHistorialBD(area){
+  fetch('/api/registros?area='+area)
+  .then(function(r){return r.json();})
+  .then(function(data){
+    if(!data||!Array.isArray(data)||!data.length)return;
+    // Convertir formato BD → formato local
+    var regs=data.map(function(r){
+      return {id:r.id,fecha:r.fecha,d:r.datos||{},inc:r.incidencia,desc:r.descripcion};
+    });
+    // Fusionar con local (local primero para registros recientes sin sync)
+    var local=gR(area);
+    var bdIds=new Set(regs.map(function(r){return r.id;}));
+    var soloLocal=local.filter(function(r){return !bdIds.has(r.id)&&typeof r.id==='number'&&r.id>1700000000000;});
+    var merged=soloLocal.concat(regs);
+    merged.sort(function(a,b){return (b.id>a.id)?1:-1;});
+    sR(area,merged.slice(0,200));
+    renderHist(area);
+  })
+  .catch(function(e){
+    console.warn('BD no disponible, usando local');
+    renderHist(area);
+  });
+}
+
+// Cargar pedidos de BD al abrir admin o pedidos
+var _entrarOrigSync=window.entrar||entrar;
+window.entrar=function(area){
+  _entrarOrigSync(area);
+  if(area==='blancos'||area==='tejido'||area==='confeccion'||area==='tenido'||area==='empaque'){
+    // Pre-sincronizar historial en background
+    setTimeout(function(){cargarHistorialBD(area);},500);
+  }
+};
 
 </script>
