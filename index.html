@@ -3640,4 +3640,150 @@ function descontarHilo(tipo,conos){
 // Limpiar filas de hilo después de guardar
 var _guardarTejOrig=guardar;
 
+
+// ══ CAPA DE SINCRONIZACIÓN CON BASE DE DATOS ══
+var API_BASE = '';  // mismo servidor
+
+async function apiGet(endpoint) {
+  try {
+    var res = await fetch(API_BASE + endpoint);
+    if (!res.ok) throw new Error('Error ' + res.status);
+    return await res.json();
+  } catch(e) {
+    console.warn('API fallo, usando local:', e);
+    return null;
+  }
+}
+
+async function apiPost(endpoint, data) {
+  try {
+    var res = await fetch(API_BASE + endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error('Error ' + res.status);
+    return res.status === 204 ? {} : await res.json();
+  } catch(e) {
+    console.warn('API fallo, guardando local:', e);
+    return null;
+  }
+}
+
+async function apiDelete(endpoint) {
+  try {
+    await fetch(API_BASE + endpoint, {method: 'DELETE'});
+  } catch(e) {
+    console.warn('API delete fallo:', e);
+  }
+}
+
+// ── Registros (reemplaza gR y sR) ──
+async function gRAsync(area) {
+  var data = await apiGet('/api/registros?area=' + area);
+  if (data && Array.isArray(data)) {
+    return data.map(function(r) {
+      return {
+        id: r.id,
+        fecha: r.fecha,
+        d: r.datos || {},
+        inc: r.incidencia,
+        desc: r.descripcion
+      };
+    });
+  }
+  // Fallback a localStorage
+  return gR(area);
+}
+
+async function guardarRegistroAsync(area, fecha, d, inc, desc) {
+  var payload = {
+    area: area,
+    fecha: fecha,
+    folio: parseInt(d.folio) || null,
+    bolsa: parseInt(d.bolsa) || null,
+    datos: d,
+    incidencia: inc || null,
+    descripcion: desc || null
+  };
+  var result = await apiPost('/api/registros', payload);
+  // También guardar en localStorage como backup
+  var regs = gR(area);
+  var localReg = {id: result && result[0] ? result[0].id : Date.now(), fecha: fecha, d: d, inc: inc, desc: desc};
+  regs.unshift(localReg);
+  sR(area, regs);
+  return localReg;
+}
+
+async function borrarRegistroAsync(area, id) {
+  await apiDelete('/api/registros?id=' + id);
+  sR(area, gR(area).filter(function(r){ return r.id !== id; }));
+}
+
+// ── Pedidos ──
+async function gPedAsync() {
+  var data = await apiGet('/api/pedidos');
+  if (data && Array.isArray(data)) {
+    // Sincronizar con localStorage
+    localStorage.setItem('cris_pedidos', JSON.stringify(data));
+    return data;
+  }
+  return gPed ? gPed() : [];
+}
+
+async function guardarPedidoAsync(ped) {
+  var result = await apiPost('/api/pedidos', ped);
+  var peds = gPed ? gPed() : [];
+  if (result && result[0]) {
+    peds.unshift(result[0]);
+  } else {
+    peds.unshift(ped);
+  }
+  localStorage.setItem('cris_pedidos', JSON.stringify(peds));
+  return result;
+}
+
+// ── Casa Azul ──
+async function gCaAsync() {
+  var data = await apiGet('/api/casaazul');
+  if (data && Array.isArray(data)) {
+    localStorage.setItem('cris_casaazul', JSON.stringify(data.map(function(r){
+      return {id:r.id,dir:r.direccion,tipo:r.tipo,cod:r.codigo,talla:r.talla,
+        cant:r.cantidad,unidad:r.unidad,od:r.direccion==='entrada'?r.origen:r.destino,
+        fecha:r.fecha,obs:r.notas};
+    })));
+    return localStorage.getItem('cris_casaazul') ? JSON.parse(localStorage.getItem('cris_casaazul')) : [];
+  }
+  return gCa();
+}
+
+async function guardarCaAsync(mov) {
+  var payload = {
+    direccion: mov.dir,
+    tipo: mov.tipo,
+    codigo: mov.cod,
+    talla: mov.talla,
+    cantidad: parseFloat(mov.cant) || 0,
+    unidad: mov.unidad || 'doc',
+    origen: mov.dir === 'entrada' ? mov.od : null,
+    destino: mov.dir === 'salida' ? mov.od : null,
+    fecha: mov.fecha,
+    notas: mov.obs || null
+  };
+  var result = await apiPost('/api/casaazul', payload);
+  return result;
+}
+
+// ── Inicialización: cargar datos de la BD al abrir ──
+window.addEventListener('load', function() {
+  // Pre-cargar pedidos de la BD
+  gPedAsync().then(function(peds) {
+    if (peds && peds.length) {
+      console.log('Pedidos cargados de BD:', peds.length);
+    }
+  });
+});
+
+// ══ FIN CAPA DE SINCRONIZACIÓN ══
+
 </script>
