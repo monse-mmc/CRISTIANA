@@ -1135,7 +1135,29 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="ct">📤 Exportar todo al CSV anual</div>
       <p class="hint">Incluye todas las áreas, nómina, pedidos, servicios y costos del año seleccionado.</p>
       <div class="field"><label>Año</label><input type="number" id="adm-exp-anio" placeholder="2025"></div>
-      <button class="btn-exp" onclick="exportarTodo()">⬇️ Descargar CSV completo</button>
+      <button class="btn-exp" onclick="exportarTodo()">⬇️ CSV local</button>
+      <button id="btn-export-bd" class="btn-exp" onclick="exportarBD()" style="background:#2E7D32;margin-top:8px;width:100%">⬇️ Descargar Excel completo (Base de datos)</button>
+      <div class="card" style="margin-top:12px;padding:12px">
+        <div class="ct">Exportar por área y fechas</div>
+        <div class="field"><label>Área</label>
+          <select id="exp-bd-area">
+            <option value="">Todas</option>
+            <option value="tejido">Tejido</option>
+            <option value="confeccion">Confección</option>
+            <option value="tenido">Teñido</option>
+            <option value="empaque">Empaque</option>
+            <option value="blancos">Blancos</option>
+            <option value="centenario">Centenario</option>
+            <option value="maquila1">Maquila 1</option>
+            <option value="maquila2">Maquila 2</option>
+          </select>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Desde</label><input type="date" id="exp-bd-desde"></div>
+          <div class="field"><label>Hasta</label><input type="date" id="exp-bd-hasta"></div>
+        </div>
+        <button id="btn-export-filtrado" class="btn-exp" onclick="exportarBDFiltrado()" style="background:#1565C0;width:100%">Descargar filtrado</button>
+      </div>
     </div>
     <div class="card" style="margin-top:8px">
       <div class="ct">📤 Exportar área individual</div>
@@ -3846,5 +3868,131 @@ window.entrar=function(area){
     setTimeout(function(){cargarHistorialBD(area);},500);
   }
 };
+
+
+// ══ EXPORTAR A EXCEL DESDE BASE DE DATOS ══
+async function exportarBD(){
+  var btn=document.getElementById('btn-export-bd');
+  if(btn){btn.textContent='Descargando...';btn.disabled=true;}
+  
+  try {
+    // Jalar todos los registros de la BD
+    var res = await fetch('/api/registros');
+    var registros = await res.json();
+    
+    if(!registros||!registros.length){
+      toast('No hay registros en la base de datos');
+      if(btn){btn.textContent='Descargar Excel (BD)';btn.disabled=false;}
+      return;
+    }
+
+    // Construir CSV
+    var csv = 'CRISTIANA - EXPORTACION COMPLETA\n';
+    csv += 'Generado: '+new Date().toLocaleDateString('es-MX')+'\n\n';
+    
+    // Encabezados
+    csv += 'Area,Fecha,Folio,Bolsa,Codigo,Talla,Color,Doc,Segundas,Cliente,Maquina,Peso,Incidencia,Registrado\n';
+    
+    // Datos
+    registros.forEach(function(r){
+      var d = r.datos || {};
+      var row = [
+        r.area||'',
+        r.fecha||'',
+        r.folio||'',
+        d.bolsa||'',
+        d.codigo||'',
+        d.talla||'',
+        d.color||'',
+        d.doc||'',
+        d.seg||'',
+        d.cliente||'',
+        d.maquina||'',
+        d.peso||'',
+        r.incidencia||'',
+        (r.creado_en||'').slice(0,16)
+      ].map(function(v){
+        // Escapar comas y comillas
+        var s = String(v||'');
+        if(s.indexOf(',')>=0||s.indexOf('"')>=0) s = '"'+s.replace(/"/g,'""')+'"';
+        return s;
+      });
+      csv += row.join(',') + '\n';
+    });
+
+    // También agregar pedidos
+    var resPed = await fetch('/api/pedidos');
+    var pedidos = await resPed.json();
+    if(pedidos&&pedidos.length){
+      csv += '\n\nPEDIDOS\n';
+      csv += 'ID,Cliente,Codigo,Talla,Color,Doc Pedidas,Doc Hechas,Estado,Fecha\n';
+      pedidos.forEach(function(p){
+        csv += [p.id,p.cliente,p.codigo,p.talla,p.color,
+                p.doc_pedidas,p.doc_hechas,p.estado,p.fecha].join(',')+'\n';
+      });
+    }
+
+    // Descargar
+    var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'cristiana-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast('Excel descargado - '+registros.length+' registros');
+    
+  } catch(e) {
+    console.error(e);
+    toast('Error al descargar: '+e.message);
+  }
+  
+  if(btn){btn.textContent='Descargar Excel (BD)';btn.disabled=false;}
+}
+
+// Exportar por area y rango de fechas
+async function exportarBDFiltrado(){
+  var area = v('exp-bd-area')||'';
+  var desde = v('exp-bd-desde')||'';
+  var hasta = v('exp-bd-hasta')||'';
+  var btn = document.getElementById('btn-export-filtrado');
+  if(btn){btn.textContent='Descargando...';btn.disabled=true;}
+  
+  try {
+    var url = '/api/registros';
+    var params = [];
+    if(area) params.push('area='+area);
+    if(desde) params.push('desde='+desde);
+    if(hasta) params.push('hasta='+hasta);
+    if(params.length) url += '?' + params.join('&');
+    
+    var res = await fetch(url);
+    var registros = await res.json();
+    
+    var csv = 'CRISTIANA - '+((area||'TODAS LAS AREAS').toUpperCase())+'\n';
+    if(desde||hasta) csv += 'Periodo: '+(desde||'inicio')+' a '+(hasta||'hoy')+'\n';
+    csv += 'Total registros: '+registros.length+'\n\n';
+    csv += 'Area,Fecha,Folio,Bolsa,Codigo,Talla,Color,Doc,Segundas,Cliente,Maquina,Incidencia\n';
+    
+    registros.forEach(function(r){
+      var d=r.datos||{};
+      csv += [r.area,r.fecha,r.folio,d.bolsa,d.codigo,d.talla,d.color,
+              d.doc,d.seg,d.cliente,d.maquina,r.incidencia||''].join(',')+'\n';
+    });
+    
+    var blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'cristiana-'+(area||'todo')+'-'+new Date().toISOString().slice(0,10)+'.csv';
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    toast('Descargado - '+registros.length+' registros');
+    
+  } catch(e){ toast('Error: '+e.message); }
+  if(btn){btn.textContent='Descargar';btn.disabled=false;}
+}
+
 
 </script>

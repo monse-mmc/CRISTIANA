@@ -71,8 +71,11 @@ http.createServer(async (req, res) => {
     // REGISTROS
     if (p === '/api/registros') {
       if (req.method === 'GET') {
-        const d = await sbFetch('GET', 'registros', null,
-          q.area ? `?area=eq.${q.area}&order=creado_en.desc&limit=200` : '?order=creado_en.desc&limit=200');
+        let qs2 = '?order=creado_en.desc&limit=2000';
+        if (q.area) qs2 += `&area=eq.${q.area}`;
+        if (q.desde) qs2 += `&fecha=gte.${q.desde}`;
+        if (q.hasta) qs2 += `&fecha=lte.${q.hasta}`;
+        const d = await sbFetch('GET', 'registros', null, qs2);
         res.writeHead(200); res.end(JSON.stringify(d)); return;
       }
       if (req.method === 'POST') {
