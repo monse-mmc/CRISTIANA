@@ -291,6 +291,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="ct">⚠️ Incidencia</div>
         <div class="field"><label>Tipo</label><select id="c-inc"><option value="">Sin incidencia</option><option>Color no coincide</option><option>Falla de equipo</option><option>Manchas o defectos</option><option>Otro</option></select></div>
         <div class="field"><label>Descripción</label><textarea id="c-desc" placeholder="describe..."></textarea></div>
+      <div class="field"><label>📷 Foto de incidencia</label><input type="file" id="c-foto" accept="image/*" capture="environment" style="width:100%;padding:6px;font-size:13px"></div>
       </div>
       <button class="btn-main" onclick="guardar('confeccion')">Guardar registro</button>
     </div>
@@ -3994,5 +3995,106 @@ async function exportarBDFiltrado(){
   if(btn){btn.textContent='Descargar';btn.disabled=false;}
 }
 
+
+
+// ══ FOTOS DE INCIDENCIAS ══
+var SUPA_URL = 'https://giyjuebnrskookzpuvai.supabase.co';
+var SUPA_KEY = 'sb_publishable_l2MITKljePLHfGVdipmSIA_oYYHSvg9';
+var BUCKET = 'incidencia';
+
+async function subirFoto(inputId, area, folio, bolsa) {
+  var input = document.getElementById(inputId);
+  if (!input || !input.files || !input.files[0]) return null;
+  
+  var file = input.files[0];
+  var ext = file.name.split('.').pop() || 'jpg';
+  var nombre = area + '-F' + (folio||'0') + '-B' + (bolsa||'0') + '-' + Date.now() + '.' + ext;
+  
+  try {
+    var res = await fetch(SUPA_URL + '/storage/v1/object/' + BUCKET + '/' + nombre, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': file.type,
+        'x-upsert': 'true'
+      },
+      body: file
+    });
+    
+    if (!res.ok) {
+      console.warn('Error subiendo foto:', await res.text());
+      return null;
+    }
+    
+    var url = SUPA_URL + '/storage/v1/object/public/' + BUCKET + '/' + nombre;
+    console.log('Foto subida:', url);
+    return url;
+    
+  } catch(e) {
+    console.warn('Error foto:', e);
+    return null;
+  }
+}
+
+// Modificar guardar para incluir foto
+var _guardarOrigFoto = guardar;
+function guardar(area) {
+  // Obtener el input de foto según el área
+  var prefMap = {tejido:'t', confeccion:'c', tenido:'n', empaque:'e', blancos:'h', centenario:'k'};
+  var pref = prefMap[area];
+  var fotoInput = pref ? document.getElementById(pref + '-foto') : null;
+  var folio = pref ? (document.getElementById(pref+'-folio')&&document.getElementById(pref+'-folio').value||'0') : '0';
+  var bolsa = pref ? (document.getElementById(pref+'-bolsa')&&document.getElementById(pref+'-bolsa').value||'0') : '0';
+  
+  if (fotoInput && fotoInput.files && fotoInput.files[0]) {
+    // Subir foto primero, luego guardar
+    subirFoto(pref+'-foto', area, folio, bolsa).then(function(url) {
+      if (url) {
+        // Guardar la URL en un campo oculto temporal
+        var hiddenId = pref + '-foto-url';
+        var hidden = document.getElementById(hiddenId);
+        if (!hidden) {
+          hidden = document.createElement('input');
+          hidden.type = 'hidden';
+          hidden.id = hiddenId;
+          document.body.appendChild(hidden);
+        }
+        hidden.value = url;
+      }
+      _guardarOrigFoto(area);
+      // Limpiar el input de foto
+      if (fotoInput) fotoInput.value = '';
+    });
+  } else {
+    _guardarOrigFoto(area);
+  }
+}
+
+// Agregar URL de foto a los datos guardados
+// Interceptar sR para incluir foto_url si existe
+var _sROrig = sR;
+function sR(area, regs) {
+  var prefMap = {tejido:'t', confeccion:'c', tenido:'n', empaque:'e'};
+  var pref = prefMap[area];
+  if (pref && regs && regs.length > 0) {
+    var hiddenId = pref + '-foto-url';
+    var hidden = document.getElementById(hiddenId);
+    if (hidden && hidden.value) {
+      regs[0].fotoUrl = hidden.value;
+      if (regs[0].d) regs[0].d.fotoUrl = hidden.value;
+      hidden.value = '';
+    }
+  }
+  _sROrig(area, regs);
+}
+
+// Mostrar fotos en el historial
+function fotoThumb(url) {
+  if (!url) return '';
+  return '<a href="' + url + '" target="_blank">'
+    + '<img src="' + url + '" style="width:60px;height:60px;object-fit:cover;border-radius:8px;margin-top:4px;cursor:pointer">'
+    + '</a>';
+}
 
 </script>
