@@ -363,6 +363,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div style="font-size:13px;font-weight:600;margin-bottom:6px">✍️ Confirmar recepción</div>
         <div class="field"><label>Recibió</label><input type="text" id="k-recibio" placeholder="Nombre de quien recibe"></div>
       </div>
+      <div class="card">
+        <div class="ct">⚠️ Incidencia</div>
+        <div class="field"><label>Tipo</label><select id="k-inc"><option value="">Sin incidencia</option><option>Color no coincide</option><option>Falla de equipo</option><option>Manchas o defectos</option><option>Otro</option></select></div>
+        <div class="field"><label>Descripción</label><textarea id="k-desc" placeholder="describe..." style="min-height:36px"></textarea></div>
+        <div class="field"><label>📷 Foto de incidencia</label><input type="file" id="k-foto" accept="image/*" capture="environment" style="width:100%;padding:6px;font-size:13px"></div>
+      </div>
       <button class="btn-main" onclick="guardarRecepcionCent()" style="background:#8B5E3C">Registrar recepción</button>
       <div class="card" style="margin-top:10px">
         <div class="ct">📋 Bolsas en Centenario</div>
@@ -418,7 +424,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
         <div class="field"><label>Segundas (doc)</label><input type="number" id="kr-seg" min="0" step="0.5" placeholder="0"></div>
         <div class="field"><label>Notas</label><textarea id="kr-obs" placeholder="..." style="min-height:36px"></textarea></div>
-        <button class="btn-main" onclick="guardarRegresoCent()" style="background:#2E7D32">Registrar regreso</button>
+        <div class="card">
+        <div class="ct">⚠️ Incidencia en regreso</div>
+        <div class="field"><label>Tipo</label><select id="kr-inc"><option value="">Sin incidencia</option><option>Piezas faltantes</option><option>Defecto de costura</option><option>Manchas o defectos</option><option>Otro</option></select></div>
+        <div class="field"><label>Descripción</label><textarea id="kr-desc" placeholder="describe..." style="min-height:36px"></textarea></div>
+        <div class="field"><label>📷 Foto</label><input type="file" id="kr-foto" accept="image/*" capture="environment" style="width:100%;padding:6px;font-size:13px"></div>
+      </div>
+      <button class="btn-main" onclick="guardarRegresoCent()" style="background:#2E7D32">Registrar regreso</button>
       </div>
     </div>
     <div class="sec" id="cent-tolva">
@@ -1001,7 +1013,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="card">
         <div class="row2">
           <div class="field"><label>Servicio</label>
-            <select id="adm-serv-tipo"><option value="luz">Luz</option><option value="agua">Agua</option><option value="gas">Gas</option></select>
+            <select id="adm-serv-tipo">
+              <option value="gas">🔥 Gas (semanal)</option>
+              <option value="internet">📶 Internet (mensual)</option>
+              <option value="luz">💡 Luz (bimestral)</option>
+              <option value="agua">💧 Agua (bimestral)</option>
+            </select>
           </div>
           <div class="field"><label>Fecha de pago</label><input type="date" id="adm-serv-fecha"></div>
         </div>
@@ -2282,7 +2299,12 @@ function guardarCfgAgujas(){
   var bol=document.getElementById('admcfg-bol');if(bol)cfg.sbol=parseInt(bol.value)||0;
   sC('confeccion',cfg);toast('Agujas guardadas');
 }
-var SERV_DEF=[{id:'luz',n:'Luz',icon:'💡'},{id:'agua',n:'Agua',icon:'💧'},{id:'gas',n:'Gas',icon:'🔥'}];
+var SERV_DEF=[
+  {id:'gas',n:'Gas',icon:'🔥',periodo:'semanal',dias:7},
+  {id:'internet',n:'Internet',icon:'📶',periodo:'mensual',dias:30},
+  {id:'luz',n:'Luz',icon:'💡',periodo:'bimestral',dias:60},
+  {id:'agua',n:'Agua',icon:'💧',periodo:'bimestral',dias:60}
+];
 function renderSemServ(){
   var serv=gServ();var el=document.getElementById('adm-sem-servicios');if(!el)return;
   var hoy=new Date();
@@ -3846,26 +3868,20 @@ window.addEventListener('load', function() {
 // Cargar historial desde BD y sincronizar
 function cargarHistorialBD(area){
   fetch('/api/registros?area='+area)
-  .then(function(r){return r.json();})
+  .then(function(r){if(!r.ok)throw new Error(r.status);return r.json();})
   .then(function(data){
     if(!data||!Array.isArray(data)||!data.length)return;
-    // Convertir formato BD → formato local
     var regs=data.map(function(r){
-      return {id:r.id,fecha:r.fecha,d:r.datos||{},inc:r.incidencia,desc:r.descripcion};
+      return {id:r.id,fecha:r.fecha,d:r.datos||{},inc:r.incidencia,desc:r.descripcion,fotoUrl:r.datos&&r.datos.fotoUrl};
     });
-    // Fusionar con local (local primero para registros recientes sin sync)
-    var local=gR(area);
-    var bdIds=new Set(regs.map(function(r){return r.id;}));
-    var soloLocal=local.filter(function(r){return !bdIds.has(r.id)&&typeof r.id==='number'&&r.id>1700000000000;});
-    var merged=soloLocal.concat(regs);
-    merged.sort(function(a,b){return (b.id>a.id)?1:-1;});
-    sR(area,merged.slice(0,200));
-    renderHist(area);
+    sR(area,regs.slice(0,200));
+    // Si estamos viendo el historial de esta área, actualizarlo
+    if(AREA===area){
+      var el=document.getElementById('hist-'+area);
+      if(el&&el.offsetParent!==null) renderHist(area);
+    }
   })
-  .catch(function(e){
-    console.warn('BD no disponible, usando local');
-    renderHist(area);
-  });
+  .catch(function(e){console.warn('BD sync fallo:',e);});
 }
 
 // Cargar pedidos de BD al abrir admin o pedidos
@@ -4047,7 +4063,7 @@ async function subirFoto(inputId, area, folio, bolsa) {
 
 // Modificar guardar para incluir foto
 var _guardarOrigFoto = guardar;
-function guardar(area) {
+window.guardar = function(area) {
   // Obtener el input de foto según el área
   var prefMap = {tejido:'t', confeccion:'c', tenido:'n', empaque:'e', blancos:'h', centenario:'k'};
   var pref = prefMap[area];
@@ -4104,5 +4120,11 @@ function fotoThumb(url) {
     + '<img src="' + url + '" style="width:60px;height:60px;object-fit:cover;border-radius:8px;margin-top:4px;cursor:pointer">'
     + '</a>';
 }
+
+
+// Sincronización al entrar a cada área
+
+
+
 
 </script>
