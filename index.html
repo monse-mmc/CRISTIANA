@@ -223,7 +223,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field"><label>Descripción</label><textarea id="t-desc" placeholder="describe..."></textarea></div>
         <div class="field"><label>📷 Foto (opcional)</label><input type="file" id="t-foto" accept="image/*" capture="environment" style="font-size:12px"></div>
       </div>
-      <button class="btn-main" onclick="guardar('tejido')">Guardar registro</button>
+      <button class="btn-main" onclick="guardarConFoto('tejido')">Guardar registro</button>
     </div>
     <div class="sec" id="tej-insumos">
       <div class="hilo-blk">
@@ -302,7 +302,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field"><label>Descripción</label><textarea id="c-desc" placeholder="describe..."></textarea></div>
       <div class="field"><label>📷 Foto de incidencia</label><input type="file" id="c-foto" accept="image/*" capture="environment" style="width:100%;padding:6px;font-size:13px"></div>
       </div>
-      <button class="btn-main" onclick="guardar('confeccion')">Guardar registro</button>
+      <button class="btn-main" onclick="guardarConFoto('confeccion')">Guardar registro</button>
     </div>
         <div class="sec" id="conf-insumos">
       <div class="card"><div class="ct">Agujas en stock</div><div id="sem-conf"></div></div>
@@ -703,7 +703,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field"><label>📷 Foto (opcional)</label><input type="file" id="n-foto" accept="image/*" capture="environment" style="font-size:12px"></div>
       </div>
       <div class="card"><div class="ct">⏱ Tiempo en tina</div><div class="row2"><div class="field"><label>Hora entrada</label><input type="time" id="n-hora-in"></div><div class="field"><label>Hora salida</label><input type="time" id="n-hora-out"></div></div><button type="button" style="padding:8px 13px;border:none;border-radius:9px;font-size:13px;cursor:pointer;background:#E3F2FD;color:#1565C0;margin-right:6px" onclick="marcarAhora('n-hora-in','n')">Entrada ahora</button><button type="button" style="padding:8px 13px;border:none;border-radius:9px;font-size:13px;cursor:pointer;background:#E8F5E9;color:#2E7D32" onclick="marcarAhora('n-hora-out','n')">Salida ahora</button><div id="n-dur-info" style="font-size:13px;min-height:20px;margin-top:6px"></div></div>
-      <button class="btn-main" onclick="guardarConHoras('tenido')">Guardar registro</button>
+      <button class="btn-main" onclick="guardarConFoto('tenido')">Guardar registro</button>
     </div>
     <div class="sec" id="ten-horas"><div class="card"><div class="ct">⏱ Timeline</div><input type="date" id="ten-hor-fecha" style="width:100%;padding:8px 11px;border:1.5px solid #E5E5E5;border-radius:10px;font-size:14px;background:#FAFAFA;font-family:inherit;margin-bottom:10px"><div id="ten-horas-alertas" style="margin-bottom:8px"></div><div id="ten-horas-tl"></div></div></div>
     <div class="sec" id="ten-historial"><div id="hist-tenido"></div></div>
@@ -766,7 +766,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="field"><label>📷 Foto de incidencia (opcional)</label><input type="file" id="e-foto" accept="image/*" capture="environment" style="font-size:12px"></div>
       </div>
       <div class="card"><div class="ct">⏱ Tiempo de empaque</div><div class="row2"><div class="field"><label>Hora entrada</label><input type="time" id="e-hora-in"></div><div class="field"><label>Hora salida</label><input type="time" id="e-hora-out"></div></div><button type="button" style="padding:8px 13px;border:none;border-radius:9px;font-size:13px;cursor:pointer;background:#E3F2FD;color:#1565C0;margin-right:6px" onclick="marcarAhora('e-hora-in','e')">Entrada ahora</button><button type="button" style="padding:8px 13px;border:none;border-radius:9px;font-size:13px;cursor:pointer;background:#E8F5E9;color:#2E7D32" onclick="marcarAhora('e-hora-out','e')">Salida ahora</button><div id="e-dur-info" style="font-size:13px;min-height:20px;margin-top:6px"></div></div>
-      <button class="btn-main" onclick="guardarConHoras('empaque')">Guardar registro</button>
+      <button class="btn-main" onclick="guardarConFoto('empaque')">Guardar registro</button>
     </div>
     <div class="sec" id="emp-horas"><div class="card"><div class="ct">⏱ Timeline</div><input type="date" id="emp-hor-fecha" style="width:100%;padding:8px 11px;border:1.5px solid #E5E5E5;border-radius:10px;font-size:14px;background:#FAFAFA;font-family:inherit;margin-bottom:10px"><div id="emp-horas-alertas" style="margin-bottom:8px"></div><div id="emp-horas-tl"></div></div></div>
     <div class="sec" id="emp-historial"><div id="hist-empaque"></div></div>
@@ -4152,37 +4152,36 @@ async function subirFoto(inputId, area, folio, bolsa) {
   }
 }
 
-// Modificar guardar para incluir foto
-var _guardarOrigFoto = guardar;
-window.guardar = function(area) {
-  // Obtener el input de foto según el área
-  var prefMap = {tejido:'t', confeccion:'c', tenido:'n', empaque:'e', blancos:'h', centenario:'k'};
-  var pref = prefMap[area];
-  var fotoInput = pref ? document.getElementById(pref + '-foto') : null;
-  var folio = pref ? (document.getElementById(pref+'-folio')&&document.getElementById(pref+'-folio').value||'0') : '0';
-  var bolsa = pref ? (document.getElementById(pref+'-bolsa')&&document.getElementById(pref+'-bolsa').value||'0') : '0';
-  
-  if (fotoInput && fotoInput.files && fotoInput.files[0]) {
-    // Subir foto primero, luego guardar
-    subirFoto(pref+'-foto', area, folio, bolsa).then(function(url) {
-      if (url) {
-        // Guardar la URL en un campo oculto temporal
-        var hiddenId = pref + '-foto-url';
-        var hidden = document.getElementById(hiddenId);
-        if (!hidden) {
-          hidden = document.createElement('input');
-          hidden.type = 'hidden';
-          hidden.id = hiddenId;
-          document.body.appendChild(hidden);
-        }
-        hidden.value = url;
-      }
-      _guardarOrigFoto(area);
-      // Limpiar el input de foto
-      if (fotoInput) fotoInput.value = '';
+// Guardar con foto — función separada, no pisa guardar()
+function guardarConFoto(area){
+  var prefMap={tejido:'t',confeccion:'c',tenido:'n',empaque:'e',blancos:'h',centenario:'k'};
+  var pref=prefMap[area];
+  var fotoInput=pref?document.getElementById(pref+'-foto'):null;
+  var folio=pref?(document.getElementById(pref+'-folio')&&document.getElementById(pref+'-folio').value||'0'):'0';
+  var bolsa=pref?(document.getElementById(pref+'-bolsa')&&document.getElementById(pref+'-bolsa').value||'0'):'0';
+
+  function doGuardar(url){
+    if(url&&pref){
+      var hid=document.getElementById(pref+'-foto-url');
+      if(!hid){hid=document.createElement('input');hid.type='hidden';hid.id=pref+'-foto-url';document.body.appendChild(hid);}
+      hid.value=url;
+    }
+    // Usar guardarConHoras para tenido/empaque (maneja las horas también)
+    if(area==='tenido'||area==='empaque'){
+      guardarConHoras(area);
+    } else {
+      guardar(area);
+    }
+    if(fotoInput)fotoInput.value='';
+  }
+
+  if(fotoInput&&fotoInput.files&&fotoInput.files[0]){
+    subirFoto(pref+'-foto',area,folio,bolsa).then(doGuardar).catch(function(e){
+      console.warn('Error foto:',e);
+      doGuardar(null);
     });
   } else {
-    _guardarOrigFoto(area);
+    doGuardar(null);
   }
 }
 
@@ -4334,6 +4333,8 @@ function borrarTraslado(id){
     }
   };
 })();
+
+
 
 
 
